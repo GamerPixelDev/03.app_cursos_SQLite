@@ -1,12 +1,4 @@
-import sqlite3
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BASE_DIR)
-DB_PATH = os.path.join(ROOT_DIR, "data", "database.db")
-
-def get_connection():
-    return sqlite3.connect(DB_PATH)
+from models.db_connection import get_connection
 
 #--- Crear curso ---
 def crear_curso(codigo_curso, nombre, fecha_inicio, fecha_fin, lugar, modalidad, horas, responsable):

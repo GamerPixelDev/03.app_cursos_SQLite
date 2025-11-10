@@ -1,15 +1,4 @@
-import sqlite3
-import os
-
-#=== RUTA BASE DE DATOS ===#
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BASE_DIR)
-DB_PATH = os.path.join(ROOT_DIR, "data", "database.db")
-
-def get_connection():
-    """Establece y devuelve una conexión a la base de datos SQLite."""
-    conn = sqlite3.connect(DB_PATH)
-    return conn
+from models.db_connection import get_connection
 
 #Crear alumno
 def crear_alumno(nif, nombre, apellidos, localidad, codigo_postal, telefono, email, sexo, edad, estudios, estado_laboral):

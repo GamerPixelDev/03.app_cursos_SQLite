@@ -1,14 +1,6 @@
 import sqlite3
 import bcrypt
-import os
-
-# === CONEXIÓN A LA BASE DE DATOS ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BASE_DIR)
-DB_PATH = os.path.join(ROOT_DIR, "data", "database.db")
-
-def get_connection():
-    return sqlite3.connect(DB_PATH)
+from models.db_connection import get_connection
 
 # === Crear hash seguro ===
 def _hash_password(contrasena: str) -> bytes:

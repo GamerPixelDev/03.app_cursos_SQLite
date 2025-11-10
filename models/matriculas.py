@@ -1,13 +1,5 @@
-import sqlite3
-import os
+from models.db_connection import get_connection
 from datetime import datetime
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BASE_DIR)
-DB_PATH = os.path.join(ROOT_DIR, "data", "database.db")
-
-def get_connection():
-    return sqlite3.connect(DB_PATH)
 
 # --- Crear matrícula ---
 def crear_matricula(nif_alumno, codigo_curso, fecha_matricula=None):
