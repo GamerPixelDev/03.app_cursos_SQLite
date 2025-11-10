@@ -1,170 +1,128 @@
-# models/usuarios.py
-import bcrypt
 import sqlite3
-from models.db_connection import get_connection
-from models.utils_db import manejar_error_db
+import bcrypt
+import os
 
+# === CONEXIÓN A LA BASE DE DATOS ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+DB_PATH = os.path.join(ROOT_DIR, "data", "database.db")
 
-# --- helpers ---
+def get_connection():
+    return sqlite3.connect(DB_PATH)
 
-def _hash_password(contrasena: str) -> str:
-    #Devuelve el hash bcrypt como string UTF-8 (ideal para columna TEXT).
-    return bcrypt.hashpw(contrasena.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+# === Crear hash seguro ===
+def _hash_password(contrasena: str) -> bytes:
+    return bcrypt.hashpw(contrasena.encode("utf-8"), bcrypt.gensalt())
 
-
-def _as_bytes(value) -> bytes:
-    #Normaliza el valor leído de la BD (TEXT/BLOB/memoryview) a bytes para checkpw.
-    if value is None:
-        return b""
-    if isinstance(value, bytes):
-        return value
-    if isinstance(value, memoryview):
-        return bytes(value)
-    if isinstance(value, str):
-        return value.encode("utf-8")
-    return bytes(str(value), "utf-8")
-
-
-def _es_duplicado_sqlite(err: Exception) -> bool:
-    #Detecta violación de unicidad en SQLite.
-    s = str(err).lower()
-    return "unique constraint failed" in s or "unique" in s
-
-# --- API ---
-def crear_usuario(usuario: str, contrasena: str, rol: str):
+# === Crear usuario ===
+def crear_usuario(usuario, contrasena, rol):
+    conn = get_connection()
+    cur = conn.cursor()
+    hashed = _hash_password(contrasena)
     try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            hashed = _hash_password(contrasena)
-            cur.execute(
-                "INSERT INTO usuarios (usuario, contrasena, rol) VALUES (?, ?, ?)",
-                (usuario, hashed, rol)
-            )
+        cur.execute(
+            "INSERT INTO usuarios (usuario, contrasena, rol) VALUES (?, ?, ?)",
+            (usuario, hashed, rol)
+        )
+        conn.commit()
         print(f"✅ Usuario '{usuario}' creado correctamente ({rol}).")
-    except Exception as e:
-        if _es_duplicado_sqlite(e):
-            print(f"⚠️  El usuario '{usuario}' ya existe.")
-        else:
-            manejar_error_db(e, "crear usuario")
-            print(f"⚠️  Error al crear el usuario '{usuario}': {e}")
+    except sqlite3.IntegrityError:
+        print(f"⚠️  El usuario '{usuario}' ya existe.")
+    finally:
+        conn.close()
 
-def autenticar_usuario(usuario: str, contrasena: str):
-    fila = None
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT contrasena, rol FROM usuarios WHERE usuario = ?", (usuario,))
-            fila = cur.fetchone()
-            print(f"[DEBUG] Resultado consulta: {fila}")
-    except Exception as e:
-        manejar_error_db(e, "autenticar usuario")
-    if not fila:
-        return False, None
-    hashed_str_o_bytes, rol = fila
-    hashed = _as_bytes(hashed_str_o_bytes)
-    print(f"[DEBUG] Intentando validar usuario={usuario}, rol={rol}")
-    try:
-        if bcrypt.checkpw(contrasena.encode("utf-8"), hashed):
-            print("[DEBUG] Contraseña válida ✅")
-            if rol == "god" and usuario != "root_god":
-                return False, None
-            return True, rol
-    except Exception as e:
-        print("⚠️ Error al verificar hash:", e)
-        print(f"[DEBUG] No se pudo autenticar: usuario={usuario}, fila={fila}")
+# === Autenticar usuario (login) ===
+def autenticar_usuario(usuario, contrasena):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT contrasena, rol FROM usuarios WHERE usuario = ?", (usuario,))
+    fila = cur.fetchone()
+    conn.close()
+    if fila:
+        hashed, rol = fila
+        try:
+            if bcrypt.checkpw(contrasena.encode("utf-8"), hashed):
+                # Bloque extra: impide clones del GOD (solo root_god puede tener rol 'god')
+                if rol == "god" and usuario != "root_god":
+                    return False, None
+                return True, rol
+        except Exception:
+            pass
     return False, None
 
-def verificar_contrasena(usuario: str, contrasena: str) -> bool:
-    fila = None
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT contrasena FROM usuarios WHERE usuario = ?", (usuario,))
-            fila = cur.fetchone()
-    except Exception as e:
-        manejar_error_db(e, "verificar contraseña")
-        return False
-    if not fila:
-        return False
-    hashed = _as_bytes(fila[0])
-    return bcrypt.checkpw(contrasena.encode("utf-8"), hashed)
+# === Verificar contraseña actual (para MiCuentaWindow) ===
+def verificar_contrasena(usuario, contrasena):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT contrasena FROM usuarios WHERE usuario = ?", (usuario,))
+    fila = cur.fetchone()
+    conn.close()
+    return fila and bcrypt.checkpw(contrasena.encode("utf-8"), fila[0])
 
-def cambiar_contrasena(usuario: str, nueva_contrasena: str):
+# === Cambiar contraseña ===
+def cambiar_contrasena(usuario, nueva_contrasena):
     if not nueva_contrasena:
         return
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            hashed = _hash_password(nueva_contrasena)
-            cur.execute("UPDATE usuarios SET contrasena = ? WHERE usuario = ?", (hashed, usuario))
-        print(f"🔄 Contraseña actualizada para '{usuario}'.")
-    except Exception as e:
-        manejar_error_db(e, "cambiar contraseña")
+    conn = get_connection()
+    cur = conn.cursor()
+    hashed = bcrypt.hashpw(nueva_contrasena.encode('utf-8'), bcrypt.gensalt())
+    cur.execute("UPDATE usuarios SET contrasena = ? WHERE usuario = ?", (hashed, usuario))
+    conn.commit()
+    conn.close()
 
-def obtener_usuarios(incluir_god: bool = False):
-    usuarios = []
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            if incluir_god:
-                cur.execute("SELECT usuario, rol FROM usuarios ORDER BY rol DESC, usuario ASC")
-            else:
-                cur.execute("SELECT usuario, rol FROM usuarios WHERE rol != 'god' ORDER BY rol DESC, usuario ASC")
-            usuarios = cur.fetchall()
-    except Exception as e:
-        manejar_error_db(e, "obtener usuarios")
+# === Obtener usuarios (para ventana admin/GOD) ===
+def obtener_usuarios(incluir_god=False):
+    conn = get_connection()
+    cur = conn.cursor()
+    if incluir_god:
+        cur.execute("SELECT usuario, rol FROM usuarios ORDER BY rol DESC")
+    else:
+        cur.execute("SELECT usuario, rol FROM usuarios WHERE rol != 'god' ORDER BY rol DESC")
+    usuarios = cur.fetchall()
+    conn.close()
     return usuarios
 
-def eliminar_usuario(usuario: str):
-    if usuario == "root_god":
-        print("❌ No se puede eliminar el usuario raíz.")
+# === Eliminar usuario ===
+def eliminar_usuario(usuario):
+    if usuario == "root_god":  # Evita que el usuario GOD sea eliminado
+        print("Intento de eliminar root_god bloqueado.")
         return
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("DELETE FROM usuarios WHERE usuario = ?", (usuario,))
-        print(f"🗑️ Usuario '{usuario}' eliminado.")
-    except Exception as e:
-        manejar_error_db(e, "eliminar usuario")
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM usuarios WHERE usuario = ?", (usuario,))
+    conn.commit()
+    conn.close()
 
+# === Crear admin por defecto si no existe ===
 def iniciar_admin():
-    #Crea admin/admin123 si no existe.
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM usuarios WHERE usuario = 'admin'")
-            existe = cur.fetchone()
-            if not existe:
-                crear_usuario("admin", "admin123", "admin")
-                print("🛠️  Usuario 'admin' creado (contraseña: admin123)")
-            else:
-                print("Admin ya existe, no se recrea.")
-    except Exception as e:
-        manejar_error_db(e, "iniciar admin")
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM usuarios WHERE usuario = 'admin'")
+    existe = cur.fetchone()
+    conn.close()
+    if not existe:
+        crear_usuario("admin", "admin123", "admin")
+        print("🛠️  Usuario 'admin' creado (contraseña: admin123)")
+    else:
+        print("Admin ya existe, no se recrea.")
 
+# === Crear usuario GOD si no existe ===
 def iniciar_god():
-    #Crea root_god/root1234 si no existe
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM usuarios WHERE rol = 'god'")
-            existe = cur.fetchone()
-            if not existe:
-                cur.execute(
-                    "INSERT INTO usuarios (usuario, contrasena, rol) VALUES (?, ?, ?)",
-                    ("root_god", _hash_password("root1234"), "god")
-                )
-                conn.commit()
-                print("⚡ Usuario 'root_god' creado automáticamente (contraseña: root1234)")
-    except Exception as e:
-        manejar_error_db(e, "iniciar god")
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM usuarios WHERE rol = 'god'")
+    existe = cur.fetchone()
+    if not existe:
+        hashed = _hash_password("root1234")  # puedes cambiar la contraseña aquí
+        cur.execute(
+            "INSERT INTO usuarios (usuario, contrasena, rol) VALUES (?, ?, ?)",
+            ("root_god", hashed, "god")
+        )
+        conn.commit()
+        print("⚡ Usuario 'root_god' creado automáticamente (contraseña: root1234)")
+    conn.close()
 
+# === Ejecución directa ===
 if __name__ == "__main__":
-    #Prueba de conexión rápida
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT sqlite_version();")
-            print("Servidor SQLite responde:", cur.fetchone())
-    except Exception as e:
-        manejar_error_db(e, "conectando")
+    iniciar_admin()
+    iniciar_god()
