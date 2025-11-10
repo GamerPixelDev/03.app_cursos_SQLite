@@ -2,6 +2,7 @@ import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from models import alumnos, cursos, matriculas
+from models.utils_paths import get_export_path
 
 # Carpeta de salida
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "exports")
@@ -34,7 +35,7 @@ def exportar_alumnos_excel():
         max_len = max(len(str(cell.value or "")) for cell in col)
         ws.column_dimensions[col[0].column_letter].width = max_len + 2
     # Guardar archivo
-    ruta = os.path.join(EXPORT_DIR, "alumnos.xlsx")
+    ruta = get_export_path("alumnos.xlsx")
     wb.save(ruta)
     return ruta
 
@@ -63,7 +64,7 @@ def exportar_cursos_excel():
     for col in ws.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
         ws.column_dimensions[col[0].column_letter].width = max_len + 2
-    ruta = os.path.join(EXPORT_DIR, "cursos.xlsx")
+    ruta = get_export_path("cursos.xlsx")
     wb.save(ruta)
     return ruta
 
@@ -88,6 +89,6 @@ def exportar_matriculas_excel():
     for col in ws.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
         ws.column_dimensions[col[0].column_letter].width = max_len + 2
-    ruta = os.path.join(EXPORT_DIR, "matriculas.xlsx")
+    ruta = get_export_path("matriculas.xlsx")
     wb.save(ruta)
     return ruta

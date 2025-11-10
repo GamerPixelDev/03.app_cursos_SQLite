@@ -6,16 +6,14 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from models import alumnos, cursos, matriculas
-
-EXPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "exports")
-os.makedirs(EXPORT_DIR, exist_ok=True)
+from models.utils_paths import get_export_path
 
 def exportar_alumnos_pdf():
     datos = alumnos.obtener_alumnos()
     if not datos:
         raise ValueError("No hay alumnos para exportar.")
     # Ruta de salida
-    nombre_archivo = os.path.join(EXPORT_DIR, f"alumnos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
+    nombre_archivo = get_export_path(f"alumnos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
     # Crear documento (horizontal para más columnas)
     doc = SimpleDocTemplate(nombre_archivo, pagesize=landscape(A4), leftMargin=25, rightMargin=25, topMargin=40, bottomMargin=30)
     elementos = []
@@ -96,7 +94,7 @@ def exportar_cursos_pdf():
     datos = cursos.obtener_cursos()
     if not datos:
         raise ValueError("No hay cursos para exportar.")
-    nombre_archivo = os.path.join(EXPORT_DIR, f"cursos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
+    nombre_archivo = get_export_path(f"alumnos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
     doc = SimpleDocTemplate(
         nombre_archivo,
         pagesize=landscape(A4),
@@ -167,7 +165,7 @@ def exportar_matriculas_pdf():
     datos = matriculas.obtener_matriculas()
     if not datos:
         raise ValueError("No hay matrículas para exportar.")
-    nombre_archivo = os.path.join(EXPORT_DIR, f"matriculas_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
+    nombre_archivo = get_export_path(f"alumnos_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
     doc = SimpleDocTemplate(
         nombre_archivo,
         pagesize=landscape(A4),
